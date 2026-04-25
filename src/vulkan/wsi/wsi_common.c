@@ -2777,8 +2777,10 @@ wsi_create_buffer_blit_context(const struct wsi_swapchain *chain,
 
    result = wsi->AllocateMemory(chain->device, &buf_mem_info,
                                 &chain->alloc, &image->blit.memory);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
+      mesa_logd("wsi: AllocateMemory (blit) failed with %d", result);
       return result;
+   }
 
    result = wsi->BindBufferMemory(chain->device, image->blit.buffer,
                                   image->blit.memory, 0);

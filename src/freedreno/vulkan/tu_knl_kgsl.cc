@@ -91,6 +91,7 @@ bo_init_new_dmaheap(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
                     &alloc);
 
    if (ret) {
+      mesa_logd("tu_knl_kgsl: DMA_HEAP_IOCTL_ALLOC failed, errno: %d (%s)", errno, strerror(errno));
       return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                        "DMA_HEAP_IOCTL_ALLOC failed (%s)", strerror(errno));
    }
@@ -112,6 +113,7 @@ bo_init_new_ion(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
    int ret;
    ret = safe_ioctl(dev->physical_device->kgsl_dma_fd, ION_IOC_NEW_ALLOC, &alloc);
    if (ret) {
+      mesa_logd("tu_knl_kgsl: ION_IOC_NEW_ALLOC failed, errno: %d (%s)", errno, strerror(errno));
       return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                        "ION_IOC_NEW_ALLOC failed (%s)", strerror(errno));
    }
@@ -134,6 +136,7 @@ bo_init_new_ion_legacy(struct tu_device *dev, struct tu_bo **out_bo, uint64_t si
    int ret;
    ret = safe_ioctl(dev->physical_device->kgsl_dma_fd, ION_IOC_ALLOC, &alloc);
    if (ret) {
+      mesa_logd("tu_knl_kgsl: ION_IOC_ALLOC failed, errno: %d (%s)", errno, strerror(errno));
       return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                        "ION_IOC_ALLOC failed (%s)", strerror(errno));
    }
@@ -1771,15 +1774,19 @@ tu_knl_kgsl_load(struct tu_instance *instance, int fd)
    dma_fd = open(dma_heap_path, O_RDONLY);
    if (dma_fd >= 0) {
       device->kgsl_dma_type = TU_KGSL_DMA_TYPE_DMAHEAP;
+      mesa_logi("KGSL: Using DMAHEAP (/dev/dma_heap/system)");
    } else {
       dma_fd = open(ion_path, O_RDONLY);
       if (dma_fd >= 0) {
          /* ION_IOC_FREE available only for legacy ION */
          struct ion_handle_data free = { .handle = 0 };
-         if (safe_ioctl(dma_fd, ION_IOC_FREE, &free) >= 0 || errno != ENOTTY)
+         if (safe_ioctl(dma_fd, ION_IOC_FREE, &free) >= 0 || errno != ENOTTY) {
             device->kgsl_dma_type = TU_KGSL_DMA_TYPE_ION_LEGACY;
-         else
+            mesa_logi("KGSL: Using ION_LEGACY (/dev/ion)");
+         } else {
             device->kgsl_dma_type = TU_KGSL_DMA_TYPE_ION;
+            mesa_logi("KGSL: Using ION (/dev/ion)");
+         }
       } else {
          mesa_logw(
             "Unable to open neither %s nor %s, VK_KHR_external_memory_fd would be "
@@ -1793,6 +1800,8 @@ tu_knl_kgsl_load(struct tu_instance *instance, int fd)
    struct kgsl_devinfo info;
    if (get_kgsl_prop(fd, KGSL_PROP_DEVICE_INFO, &info, sizeof(info)))
       goto fail;
+
+   mesa_logi("KGSL: chip_id: 0x%08" PRIx32, info.chip_id);
 
    uint64_t gmem_iova;
    if (get_kgsl_prop(fd, KGSL_PROP_UCHE_GMEM_VADDR, &gmem_iova, sizeof(gmem_iova)))
