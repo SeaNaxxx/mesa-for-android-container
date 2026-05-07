@@ -27,6 +27,14 @@ tu_wsi_can_present_on_device(VkPhysicalDevice physicalDevice, int fd)
 {
 #ifdef HAVE_LIBDRM
    VK_FROM_HANDLE(tu_physical_device, pdevice, physicalDevice);
+
+   /* KGSL doesn't have DRM render nodes, so drmGetDevice2() will always
+    * fail on a KGSL fd.  In the Termux/X11 environment the DRI3 fd from
+    * the X server is for the same physical GPU, so treat it as compatible.
+    */
+   if (strcmp(pdevice->instance->knl->name, "kgsl") == 0)
+      return true;
+
    return wsi_common_drm_devices_equal(fd, pdevice->local_fd);
 #else
    return true;
